@@ -66,14 +66,14 @@ async function scanDynamoRecords(scanParams: any, itemArray: any, depth: number 
 // async function queryDynamoRecords()
 
 
-async function getMostRecentTemperature(dateTimestamp: string, location: string): Promise<APIGatewayProxyResult> {
-  console.log(`Get most recent temperature for time ${dateTimestamp} and location ${location}`)
-  const dateTime: Date = new Date((new Date(parseInt(dateTimestamp))).toLocaleString("en-US", { timeZone: 'America/Vancouver' }));
-  console.log("Timezone: ", dateTime.toLocaleString("en-US", { timeZoneName: "short" }));
-  const dateISOString: string = dateTime.toISOString().slice(0, 10);
-  console.log(`Date ISO String ${dateISOString}`)
+async function getMostRecentTemperature(date: string, location: string): Promise<APIGatewayProxyResult> {
+  console.log(`Get most recent temperature for date ${date} and location ${location}`)
+  // const dateTime: Date = new Date((new Date(parseInt(date))).toLocaleString("en-US", { timeZone: 'America/Vancouver' }));
+  // console.log("Timezone: ", dateTime.toLocaleString("en-US", { timeZoneName: "short" }));
+  // const dateISOString: string = dateTime.toISOString().slice(0, 10);
+  // console.log(`Date ISO String ${dateISOString}`)
   let params = {
-    TableName: DYNAMODB_TABLE_PREFIX + dateISOString,
+    TableName: DYNAMODB_TABLE_PREFIX + date,
         FilterExpression: `#locationColumn = :locationValue`,
         ExpressionAttributeValues: {
             ":locationValue": location
