@@ -10,6 +10,7 @@ AWS.config.update({
 const dynamodb = new AWS.DynamoDB.DocumentClient();
 
 const DYNAMODB_TABLE_PREFIX = "rpi-temperature-";
+const LOCATIONS_PATH = "/locations";
 const TEMPERATURE_PATH = "/temperature";
 const TEMPERATURES_PATH = "/temperatures";
 const HEALTH_PATH = "/health";
@@ -17,30 +18,36 @@ const HEALTH_PATH = "/health";
 const LOCATION_COLUMN = "location"
 const TIME_COLUMN = "time"
 
+interface Temperature {
+  value: number;
+  date: Date;
+  location?: string;
+}
+
+const MS_PER_DAY = 1000 * 60 * 60 * 24;
 
 
+function getISODateStringFromDate(date: Date): string {
+  return date.toISOString().slice(0, 10)
+}
 
+function getTimeStringFromDate(date: Date): string {
+  return date.toLocaleTimeString("us-EN").toLowerCase()
+}
 
-// function getDateFormattedFromTimestamp(dateTimestamp: string): string {
-//   function join(t: Date, a: any, s: string) {
-//     function format(m: any) {
-//        let f = new Intl.DateTimeFormat('en', m);
-//        return f.format(t);
-//     }
-//     return a.map(format).join(s);
-//   }
+function getDifferenceBetweenDays(a: Date, b: Date): number {
+  const utc1 = Date.UTC(a.getFullYear(), a.getMonth(), a.getDate());
+  const utc2 = Date.UTC(b.getFullYear(), b.getMonth(), b.getDate());
+  return Math.floor((utc2 - utc1) / MS_PER_DAY);
+}
 
-//   const dateFormat = [{year: "numeric"}, {month: "numeric"}, {day: "numeric"}];
-//   let dateString = join(new Date(dateTimestamp), dateFormat, "-");
-//   const values = dateString.split("-");
-//   const valuesWithLeadingZeros = [];
-
-//   for (let value in values) {
-//     valuesWithLeadingZeros.push(value.length < 2 ? `0${value}` : value);
-//   }
-//   dateString = valuesWithLeadingZeros.join("-");
-//   return dateString;
-// }
+function subtractDaysFromDate(date: Date, days: number): Date {
+  if (days == 0) {
+    return date;
+  }
+  date.setDate(date.getDate() - 1)
+  return subtractDaysFromDate(date, --days);
+}
 
 
 async function scanDynamoRecords(scanParams: any, itemArray: any, depth: number = 0): Promise<any> {
@@ -62,8 +69,6 @@ async function scanDynamoRecords(scanParams: any, itemArray: any, depth: number 
     console.error('Do your custom error handling here. I am just gonna log it: ', error);
   }
 }
-
-// async function queryDynamoRecords()
 
 
 async function getMostRecentTemperature(date: string, location: string): Promise<APIGatewayProxyResult> {
@@ -101,31 +106,52 @@ async function getMostRecentTemperature(date: string, location: string): Promise
 }
 
 
-function getTemperatures(startDateTimestamp: string, endDateTimestamp: string, location: string = ""): APIGatewayProxyResult {
-  // const startDateString = getDateFormattedFromTimestamp(startDateTimestamp);
-  // const endDateString = getDateFormattedFromTimestamp(endDateTimestamp);
+function getTemperatures(startDateString: string, endDateString: string, location: string = ""): APIGatewayProxyResult {
+  const startDate = new Date(startDateString);
+  const endDate = new Date(endDateString);
+  console.log("Start Date: ", startDate);
+  console.log("End Date: ", endDate);
+  const daysToFetch: number = getDifferenceBetweenDays(startDate, endDate)
+  console.log("Days to fetch: ", daysToFetch);
+
+
   return buildResponse(200);
+}
+
+
+async function getLocations(): Promise<APIGatewayProxyResult> {
+  const today = new Date();
+  const params = {
+    TableName: DYNAMODB_TABLE_PREFIX + getISODateStringFromDate(today)
+  }
+  let results: Temperature[] = await scanDynamoRecords(params, []);
+  const locations = results.map((value: Temperature) =>  value.location)
+  const uniqueLocations = Array.from(new Set(locations))
+  return buildResponse(200, uniqueLocations.length > 0 ? uniqueLocations : [])
 }
 
 
 export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> => {
   try {
-    const queries = JSON.stringify(event.queryStringParameters);
-    let response: APIGatewayProxyResult;
     const params = event.queryStringParameters;
-  
-    switch(true) {
-      case event.httpMethod === "GET" && event.path === HEALTH_PATH:
-        response = buildResponse(200);
-        break;
-      case event.httpMethod === "GET" && event.path === TEMPERATURE_PATH:
+    let response: APIGatewayProxyResult;
+
+    if (event.httpMethod === "GET") {
+      if (event.path === LOCATIONS_PATH) {
+        response = await getLocations();
+
+      } else if (event.path === TEMPERATURE_PATH) {
         response = await getMostRecentTemperature(params.date, params.location);
-        break;
-      case event.httpMethod === "GET" && event.path === TEMPERATURES_PATH:
-        response = await getTemperatures(params.startDateTime, params.endDateTime, params?.location);
-        break;
-      default:
+      
+      } else if (event.path === TEMPERATURES_PATH) {
+        response = await getTemperatures(params.startDate, params.endDate, params?.location);
+      
+      } else if (event.path === HEALTH_PATH) {
+        response = buildResponse(200);
+      
+      } else {
         response = buildResponse(404, `${event.httpMethod} ${event.path} not found`);
+      }
     }
   
     return response;
