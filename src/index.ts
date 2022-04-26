@@ -198,14 +198,37 @@ async function getTemperatures(startDateString: string, endDateString: string, l
 }
 
 
+function buildLocationsResponse(code: number, locations: string[] = []) {
+  return buildResponse(code, { locations: locations });
+}
+
+
 async function getLocations(dateString: string): Promise<APIGatewayProxyResult> {
+  console.log("getLocations running");
   const params = {
     TableName: DYNAMODB_TABLE_PREFIX + dateString
   }
-  let results: Temperature[] = await scanDynamoRecords(params, []);
-  const locations = results.map((value: Temperature) =>  value.location)
-  const uniqueLocations = Array.from(new Set(locations))
-  return buildResponse(200, uniqueLocations.length > 0 ? uniqueLocations : [])
+  const tableExists = await checkIfTableExists(params.TableName);
+  if (!tableExists) {
+    console.log(`No table for date ${dateString}`);
+    return buildLocationsResponse(200);
+  }
+
+  try {
+    const results: Temperature[] = await scanDynamoRecords(params, []);
+    console.log("Locations results: ", results);
+    if (results.length < 1) {
+      return buildLocationsResponse(200)
+    }
+    const locations: string[] = results.map((value: Temperature) =>  value.location)
+    const uniqueLocations: string[] = Array.from(new Set(locations))
+    return buildLocationsResponse(200, uniqueLocations.length > 0 ? uniqueLocations : [])
+
+  } catch (e) {
+    console.error("Error when scanning for locations: ", e);
+    return buildResponse(500, e)
+  }
+  
 }
 
 
