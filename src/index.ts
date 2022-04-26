@@ -27,8 +27,11 @@ interface Temperature {
 const MS_PER_DAY = 1000 * 60 * 60 * 24;
 
 
-function getISODateStringFromDate(date: Date): string {
-  return date.toISOString().slice(0, 10)
+export function getISODateStringFromDate(date: Date): string {
+  let year = `${date.getFullYear()}`;
+  let month = `${date.getMonth() + 1}`.length === 1 ? `0${date.getMonth() + 1}` : `${date.getMonth() + 1}`;
+  let day = `${date.getDate()}`.length === 1 ? `0${date.getDate()}` : `${date.getDate()}`;
+  return `${year}-${month}-${day}`
 }
 
 function getTimeStringFromDate(date: Date): string {
@@ -119,10 +122,9 @@ function getTemperatures(startDateString: string, endDateString: string, locatio
 }
 
 
-async function getLocations(): Promise<APIGatewayProxyResult> {
-  const today = new Date();
+async function getLocations(dateString: string): Promise<APIGatewayProxyResult> {
   const params = {
-    TableName: DYNAMODB_TABLE_PREFIX + getISODateStringFromDate(today)
+    TableName: DYNAMODB_TABLE_PREFIX + dateString
   }
   let results: Temperature[] = await scanDynamoRecords(params, []);
   const locations = results.map((value: Temperature) =>  value.location)
@@ -138,7 +140,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
 
     if (event.httpMethod === "GET") {
       if (event.path === LOCATIONS_PATH) {
-        response = await getLocations();
+        response = await getLocations(params.date);
 
       } else if (event.path === TEMPERATURE_PATH) {
         response = await getMostRecentTemperature(params.date, params.location);
